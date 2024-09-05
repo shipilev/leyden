@@ -401,7 +401,9 @@ void AOTLinkedClassBulkLoader::load_hidden_class(ClassLoaderData* loader_data, I
 }
 
 void AOTLinkedClassBulkLoader::finish_loading_javabase_classes(TRAPS) {
+  log_trace(init)("  Init: AOTLinkedClassBulkLoader::finish_javabase_preloaded_classes");
   init_required_classes_for_loader(Handle(), AOTLinkedClassTable::for_static_archive()->boot(), CHECK);
+  log_trace(init)("  Init: AOTLinkedClassBulkLoader::finish_javabase_preloaded_classes complete");
 }
 
 // Some AOT-linked classes for <class_loader> must be initialized early. This includes

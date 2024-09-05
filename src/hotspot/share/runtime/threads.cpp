@@ -321,6 +321,7 @@ static void call_initPhase1(TRAPS) {
 //
 //     After phase 2, The VM will begin search classes from -Xbootclasspath/a.
 static void call_initPhase2(TRAPS) {
+  log_trace(init)("  Init: Phase 2 starts");
   TraceTime timer("Initialize module system", TRACETIME_LOG(Info, startuptime));
 
   Klass* klass = vmClasses::System_klass();
@@ -335,31 +336,12 @@ static void call_initPhase2(TRAPS) {
     vm_exit_during_initialization(); // no message or exception
   }
 
+  log_trace(init)("  Init: System.initPhase2 called");
+
   universe_post_module_init();
+  log_trace(init)("  Init: Universe post module init finished");
 
-#if 0
-  if (CDSConfig::is_using_aot_linked_classes()) {
-    AOTLinkedClassBulkLoader::load_non_javabase_boot_classes(THREAD); 
-    if (CDSConfig::is_using_full_module_graph()) {
-      assert(SystemDictionary::java_platform_loader() != nullptr, "must be");
-      assert(SystemDictionary::java_system_loader() != nullptr,   "must be");
-      AOTLinkedClassBulkLoader::load_platform_classes(THREAD);
-      AOTLinkedClassBulkLoader::load_app_classes(THREAD);
-    } else {
-      // Special case -- we assume that the final archive has the same module graph
-      // as the training run.
-      // AOTLinkedClassBulkLoader will be called for the platform/system loaders
-      // inside SystemDictionary::compute_java_loaders().
-      assert(CDSConfig::is_dumping_final_static_archive(), "must be");
-      assert(SystemDictionary::java_platform_loader() == nullptr, "must be");
-      assert(SystemDictionary::java_system_loader() == nullptr,   "must be");
-    }
-  }
-
-#ifndef PRODUCT
-  HeapShared::initialize_test_class_from_archive(THREAD);
-#endif
-#endif
+  log_trace(init)("  Init: Finished");
 }
 
 // Phase 3. final setup - set security manager, system class loader and TCCL
@@ -376,6 +358,8 @@ static void call_initPhase3(TRAPS) {
 }
 
 void Threads::initialize_java_lang_classes(JavaThread* main_thread, TRAPS) {
+  log_trace(init)("  Init: Start Java lang classes");
+
   TraceTime timer("Initialize java.lang classes", TRACETIME_LOG(Info, startuptime));
 
   initialize_class(vmSymbols::java_lang_String(), CHECK);
@@ -383,21 +367,31 @@ void Threads::initialize_java_lang_classes(JavaThread* main_thread, TRAPS) {
   // Inject CompactStrings value after the static initializers for String ran.
   java_lang_String::set_compact_strings(CompactStrings);
 
+  log_trace(init)("  Init: String");
+
   // Initialize java_lang.System (needed before creating the thread)
   initialize_class(vmSymbols::java_lang_System(), CHECK);
+  log_trace(init)("  Init: System");
+
   // The VM creates & returns objects of this class. Make sure it's initialized.
   initialize_class(vmSymbols::java_lang_Class(), CHECK);
+  log_trace(init)("  Init: Class");
 
   initialize_class(vmSymbols::java_lang_ThreadGroup(), CHECK);
   Handle thread_group = create_initial_thread_group(CHECK);
   Universe::set_main_thread_group(thread_group());
+  log_trace(init)("  Init: ThreadGroup");
+
   initialize_class(vmSymbols::java_lang_Thread(), CHECK);
   create_initial_thread(thread_group, main_thread, CHECK);
+  log_trace(init)("  Init: Thread");
 
   HeapShared::init_box_classes(CHECK);
+  log_trace(init)("  Init: Box classes");
 
   // The VM creates objects of this class.
   initialize_class(vmSymbols::java_lang_Module(), CHECK);
+  log_trace(init)("  Init: Module");
 
 #ifdef ASSERT
   InstanceKlass *k = vmClasses::UnsafeConstants_klass();
@@ -407,13 +401,17 @@ void Threads::initialize_java_lang_classes(JavaThread* main_thread, TRAPS) {
   // initialize the hardware-specific constants needed by Unsafe
   initialize_class(vmSymbols::jdk_internal_misc_UnsafeConstants(), CHECK);
   jdk_internal_misc_UnsafeConstants::set_unsafe_constants();
+  log_trace(init)("  Init: Unsafe constants");
+
 
   // The VM preresolves methods to these classes. Make sure that they get initialized
   initialize_class(vmSymbols::java_lang_reflect_Method(), CHECK);
   initialize_class(vmSymbols::java_lang_ref_Finalizer(), CHECK);
+  log_trace(init)("  Init: java lang ref");
 
   // Phase 1 of the system initialization in the library, java.lang.System class initialization
   call_initPhase1(CHECK);
+  log_trace(init)("  Init: Phase 1 done");
 
   // Get the Java runtime name, version, and vendor info after java.lang.System is initialized.
   // Some values are actually configure-time constants but some can be set via the jlink tool and
@@ -433,6 +431,8 @@ void Threads::initialize_java_lang_classes(JavaThread* main_thread, TRAPS) {
     JDK_Version::set_runtime_vendor_vm_bug_url(get_java_version_info(ik, vmSymbols::java_runtime_vendor_vm_bug_url_name()));
   }
 
+  log_trace(init)("  Init: Versions done");
+
   // an instance of OutOfMemory exception has been allocated earlier
   initialize_class(vmSymbols::java_lang_OutOfMemoryError(), CHECK);
   initialize_class(vmSymbols::java_lang_NullPointerException(), CHECK);
@@ -444,6 +444,8 @@ void Threads::initialize_java_lang_classes(JavaThread* main_thread, TRAPS) {
   initialize_class(vmSymbols::java_lang_IllegalMonitorStateException(), CHECK);
   initialize_class(vmSymbols::java_lang_IllegalArgumentException(), CHECK);
   initialize_class(vmSymbols::java_lang_InternalError(), CHECK);
+
+  log_trace(init)("  Init: Exceptions done");
 }
 
 bool Threads::initialize_compilation(TRAPS) {
@@ -582,6 +584,8 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   // Initialize output stream logging
   ostream_init_log();
 
+  log_trace(init)("Init: Logging initialized");
+
   // Launch -agentlib/-agentpath and converted -Xrun agents
   JvmtiAgentList::load_agents();
 
@@ -591,6 +595,8 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
 
   // Initialize global data structures and create system classes in heap
   vm_init_globals();
+
+  log_trace(init)("Init: Globals Initialized");
 
 #if INCLUDE_JVMCI
   if (JVMCICounterSize > 0) {
@@ -634,12 +640,18 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   // crash Linux VM, see notes in os_linux.cpp.
   main_thread->stack_overflow_state()->create_stack_guard_pages();
 
+  log_trace(init)("Init: Main thread attached");
+
   // Initialize Java-Level synchronization subsystem
   ObjectMonitor::Initialize();
   ObjectSynchronizer::initialize();
 
+  log_trace(init)("Init: Java-Level synchronization subsystem initialized");
+
   Deoptimization::init_counters();
   VMThread::init_counters();
+
+  log_trace(init)("Init: VMThread/Deopt counters initialized");
 
   // Initialize global modules
   jint status = init_globals();
@@ -652,9 +664,13 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
     xtty->elem("vm_main_thread thread='%zu'",
                (uintx) main_thread->osthread()->thread_id());
 
+  log_trace(init)("Init: Global modules initialized");
+
   // Create WatcherThread as soon as we can since we need it in case
   // of hangs during error reporting.
   WatcherThread::start();
+
+  log_trace(init)("Init: Watcher thread started");
 
   // Add main_thread to threads list to finish barrier setup with
   // on_thread_attach.  Should be before starting to build Java objects in
@@ -663,6 +679,8 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
     MutexLocker mu(Threads_lock);
     Threads::add(main_thread);
   }
+
+  log_trace(init)("Init: Main thread added to thread list");
 
   status = init_globals2();
   if (status != JNI_OK) {
@@ -677,16 +695,25 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
     return status;
   }
 
+  log_trace(init)("Init: init_globals2 completed");
+
   ObjectMonitor::Initialize2();
+  log_trace(init)("Init: Object monitor completed");
 
   JFR_ONLY(Jfr::on_create_vm_1();)
+
+  log_trace(init)("Init: JFR init completed");
 
   // Should be done after the heap is fully created
   main_thread->cache_global_variables();
 
+  log_trace(init)("Init: Caching Global Variables completed");
+
   // Any JVMTI raw monitors entered in onload will transition into
   // real raw monitor. VM is setup enough here for raw monitor enter.
   JvmtiExport::transition_pending_onload_raw_monitors();
+
+  log_trace(init)("Init: JVMTI raw monitor transition completed");
 
   // Create the VMThread
   { TraceTime timer("Start VMThread", TRACETIME_LOG(Info, startuptime));
@@ -710,6 +737,8 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
     }
   }
 
+  log_trace(init)("Init: VM Thread started");
+
   assert(Universe::is_fully_initialized(), "not initialized");
   if (VerifyDuringStartup) {
     // Make sure we're starting with a clean slate.
@@ -724,6 +753,8 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   // This update must happen before we initialize the java classes, but
   // after any initialization logic that might modify the flags.
   Arguments::update_vm_info_property(VM_Version::vm_info_string());
+
+  log_trace(init)("Init: VM Info updated");
 
   JavaThread* THREAD = JavaThread::current(); // For exception macros.
   HandleMark hm(THREAD);
@@ -740,20 +771,32 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
     JvmtiAgentList::load_xrun_agents();
   }
 
+  log_trace(init)("Init: JVMTI initialized");
+
   initialize_java_lang_classes(main_thread, CHECK_JNI_ERR);
+
+  log_trace(init)("Init: Java Lang classes initialized");
 
   quicken_jni_functions();
 
+  log_trace(init)("Init: JNI functions quickened");
+
   // No more stub generation allowed after that point.
   StubCodeDesc::freeze();
+
+  log_trace(init)("Init: Stub generation frozen");
 
   // Set flag that basic initialization has completed. Used by exceptions and various
   // debug stuff, that does not work until all basic classes have been initialized.
   set_init_completed();
 
+  log_trace(init)("Init: Basic init completed");
+
   LogConfiguration::post_initialize();
   Metaspace::post_initialize();
   MutexLockerImpl::post_initialize();
+
+  log_trace(init)("Init: Post-initialization steps completed");
 
   HOTSPOT_VM_INIT_END();
 
@@ -772,6 +815,8 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   // Signal Dispatcher needs to be started before VMInit event is posted
   os::initialize_jdk_signal_support(CHECK_JNI_ERR);
 
+  log_trace(init)("Init: JDK signal support initialized");
+
   // Start Attach Listener if +StartAttachListener or it can't be started lazily
   if (!DisableAttachMechanism) {
     AttachListener::vm_start();
@@ -780,37 +825,53 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
     }
   }
 
+  log_trace(init)("Init: Attach listener started");
+
   // Launch -Xrun agents if EagerXrunInit is not set.
   if (!EagerXrunInit) {
     JvmtiAgentList::load_xrun_agents();
   }
 
+  log_trace(init)("Init: Eager JVMTI agents started");
+
   Arena::start_chunk_pool_cleaner_task();
+
+  log_trace(init)("Init: Arena chunk pool cleaner started");
 
   // Start the service thread
   // The service thread enqueues JVMTI deferred events and does various hashtable
   // and other cleanups.  Needs to start before the compilers start posting events.
   ServiceThread::initialize();
 
+  log_trace(init)("Init: Service Thread started");
+
   // Start the monitor deflation thread:
   MonitorDeflationThread::initialize();
+
+  log_trace(init)("Init: Monitor deflation thread started");
 
 #if INCLUDE_CDS
   // Start the method sampler
   MethodProfiler::initialize();
 #endif
 
+  log_trace(init)("Init: Method Profiler started");
+
   bool force_JVMCI_initialization = initialize_compilation(CHECK_JNI_ERR);
+  log_trace(init)("Init: Compilation initialized");
 
   if (CDSConfig::is_using_aot_linked_classes()) {
     AOTLinkedClassBulkLoader::finish_loading_javabase_classes(CHECK_JNI_ERR);
     SystemDictionary::restore_archived_method_handle_intrinsics();
   }
+  log_trace(init)("Init: AOT java.base preloaded classes done");
 
   // Start string deduplication thread if requested.
   if (StringDedup::is_enabled()) {
     StringDedup::start();
   }
+
+  log_trace(init)("Init: String dedup thread started");
 
   // Pre-initialize some JSR292 core classes to avoid deadlock during class loading.
   // It is done after compilers are initialized, because otherwise compilations of
@@ -818,9 +879,12 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   // (see SystemDictionary::find_method_handle_intrinsic).
   initialize_jsr292_core_classes(CHECK_JNI_ERR);
 
+  log_trace(init)("Init: JSR 292 core classes initialized");
+
   // This will initialize the module system.  Only java.base classes can be
   // loaded until phase 2 completes
   call_initPhase2(CHECK_JNI_ERR);
+  log_trace(init)("Init: Phase 2 completed");
 
   if (CDSConfig::is_using_aot_linked_classes() && !CDSConfig::is_dumping_final_static_archive()) {
     AOTLinkedClassBulkLoader::load_non_javabase_classes(THREAD);
@@ -828,8 +892,11 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
 #ifndef PRODUCT
   HeapShared::initialize_test_class_from_archive(THREAD);
 #endif
+  log_trace(init)("Init: Load non java.base classes completed");
 
   JFR_ONLY(Jfr::on_create_vm_2();)
+
+  log_trace(init)("Init: JFR 2 completed");
 
   // Always call even when there are not JVMTI environments yet, since environments
   // may be attached late and JVMTI must track phases of VM execution
@@ -838,16 +905,26 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   // Notify JVMTI agents that VM has started (JNI is up) - nop if no agents.
   JvmtiExport::post_vm_start();
 
+  log_trace(init)("Init: JVMTI notification for VM start completed");
+
   // Final system initialization including security manager and system class loader
   call_initPhase3(CHECK_JNI_ERR);
+
+  log_trace(init)("Init: Phase 3 completed");
 
   // cache the system and platform class loaders
   SystemDictionary::compute_java_loaders(CHECK_JNI_ERR);
 
+  log_trace(init)("Init: Computing Java loaders completed");
+
   // Initiate replay training processing once preloading is over.
   CompileBroker::init_training_replay();
 
+  log_trace(init)("Init: Replay training initiated");
+
   AOTLinkedClassBulkLoader::replay_training_at_init_for_preloaded_classes(CHECK_JNI_ERR);
+
+  log_trace(init)("Init: Replay training for preloaded classes initiated");
 
   if (Continuations::enabled()) {
     // Initialize Continuation class now so that failure to create enterSpecial/doYield
@@ -855,6 +932,8 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
     // startup with the proper message that CodeCache size is too small.
     initialize_class(vmSymbols::jdk_internal_vm_Continuation(), CHECK_JNI_ERR);
   }
+
+  log_trace(init)("Init: vm.Continuation initialized");
 
 #if INCLUDE_CDS
   // capture the module path info from the ModuleEntryTable
@@ -865,11 +944,15 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   }
 #endif
 
+  log_trace(init)("Init: Module Path initialized");
+
 #if INCLUDE_JVMCI
   if (force_JVMCI_initialization) {
     JVMCI::initialize_compiler(CHECK_JNI_ERR);
   }
 #endif
+
+  log_trace(init)("Init: JVMCI init completed");
 
   if (PrecompileCode) {
     Precompiler::compile_cached_code(CHECK_JNI_ERR);
@@ -880,26 +963,40 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
     }
   }
 
+  log_trace(init)("Init: Cached code precompilation completed");
+
 #if defined(COMPILER2)
   // Pre-load cached compiled methods
   SCCache::preload_code(CHECK_JNI_ERR);
 #endif
 
+  log_trace(init)("Init: Cached compiled methods preload completed");
+
   if (NativeHeapTrimmer::enabled()) {
     NativeHeapTrimmer::initialize();
   }
+
+  log_trace(init)("Init: Native heap trimmer initialized");
 
   // Always call even when there are not JVMTI environments yet, since environments
   // may be attached late and JVMTI must track phases of VM execution
   JvmtiExport::enter_live_phase();
 
+  log_trace(init)("Init: JVMTI is in live");
+
   // Make perfmemory accessible
   PerfMemory::set_accessible(true);
+
+  log_trace(init)("Init: Perf memory is accessible");
 
   // Notify JVMTI agents that VM initialization is complete - nop if no agents.
   JvmtiExport::post_vm_initialized();
 
+  log_trace(init)("Init: JVMTI agents notified");
+
   JFR_ONLY(Jfr::on_create_vm_3();)
+
+  log_trace(init)("Init: JFR Phase 3 completed");
 
 #if INCLUDE_MANAGEMENT
   Management::initialize(THREAD);
@@ -912,7 +1009,12 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   }
 #endif // INCLUDE_MANAGEMENT
 
+  log_trace(init)("Init: Management initialized");
+
   StatSampler::engage();
+
+  log_trace(init)("Init: StatSampler engaged");
+
   if (CheckJNICalls)                  JniPeriodicChecker::engage();
 
   call_postVMInitHook(THREAD);
@@ -922,11 +1024,15 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
     CLEAR_PENDING_EXCEPTION;
   }
 
+  log_trace(init)("Init: Post VM init hook ran");
+
   // Let WatcherThread run all registered periodic tasks now.
   // NOTE:  All PeriodicTasks should be registered by now. If they
   //   aren't, late joiners might appear to start slowly (we might
   //   take a while to process their first tick).
   WatcherThread::run_all_tasks();
+
+  log_trace(init)("Init: Watcher thread ran all tasks");
 
   create_vm_timer.end();
 #ifdef ASSERT
@@ -961,6 +1067,8 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
       main_thread->set_profile_vm_ops(true);
     }
   }
+
+  log_trace(init)("Init: COMPLETE");
 
   return JNI_OK;
 }

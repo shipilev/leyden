@@ -128,6 +128,7 @@ void vm_init_globals() {
 
 
 jint init_globals() {
+  log_trace(init)("  Init: Start");
   perf_jvm_init();
   MethodHandles::init_counters();
 
@@ -142,17 +143,29 @@ jint init_globals() {
   bytecodes_init();
   classLoader_init1();
   compilationPolicy_init();
+
+  log_trace(init)("  Init: Initials are done");
+
   MetaspaceShared::open_static_archive();
+
+  log_trace(init)("  Init: Static Archive opened");
+
   codeCache_init();
   VM_Version_init();              // depends on codeCache_init for emitting code
   // stub routines in initial blob are referenced by later generated code
   initial_stubs_init();
   // stack overflow exception blob is referenced by the interpreter
   SharedRuntime::generate_initial_stubs();
+
+  log_trace(init)("  Init: Initial stubs initialized");
+
   jint status = universe_init();  // dependent on codeCache_init and
                                   // initial_stubs_init and metaspace_init.
   if (status != JNI_OK)
     return status;
+
+  log_trace(init)("  Init: Universe initialized");
+
   SCCache::initialize();
 #ifdef LEAK_SANITIZER
   {
@@ -162,6 +175,9 @@ jint init_globals() {
   }
 #endif // LEAK_SANITIZER
   SCCache::init2();        // depends on universe_init
+
+  log_trace(init)("  Init: SC cache initialized");
+
   AsyncLogWriter::initialize();
   gc_barrier_stubs_init();   // depends on universe_init, must be before interpreter_init
   continuations_init();      // must precede continuation stub generation
@@ -174,11 +190,15 @@ jint init_globals() {
   InterfaceSupport_init();
   VMRegImpl::set_regName();  // need this before generate_stubs (for printing oop maps).
   SharedRuntime::generate_stubs();
+
+  log_trace(init)("  Init: Finish");
   return JNI_OK;
 }
 
 jint init_globals2() {
+  log_trace(init)("  Init: Start");
   universe2_init();          // dependent on codeCache_init and initial_stubs_init
+  log_trace(init)("  Init: Universe2 init finished");
 
   // initialize upcalls before class loading / initialization
   runtimeUpcalls_open_registration();
@@ -191,25 +211,38 @@ jint init_globals2() {
   }
 #endif // INCLUDE_CDS
   runtimeUpcalls_close_registration();
-
+  log_trace(init)("  Init: Runtime upcalls init finished");
   javaClasses_init();        // must happen after vtable initialization, before referenceProcessor_init
+  log_trace(init)("  Init: Java classes init finished");
   interpreter_init_code();   // after javaClasses_init and before any method gets linked
+  log_trace(init)("  Init: Interpreter init finished");
   referenceProcessor_init();
+  log_trace(init)("  Init: Reference processor init finished");
   jni_handles_init();
+  log_trace(init)("  Init: JNI Handles init finished");
 #if INCLUDE_VM_STRUCTS
   vmStructs_init();
 #endif // INCLUDE_VM_STRUCTS
 
   vtableStubs_init();
+  log_trace(init)("  Init: VM stubs init finished");
+
   if (!compilerOracle_init()) {
     return JNI_EINVAL;
   }
+  log_trace(init)("  Init: Compiler oracle init finished");
+
   dependencyContext_init();
   dependencies_init();
+
+  log_trace(init)("  Init: Dependencies init finished");
 
   if (!compileBroker_init()) {
     return JNI_EINVAL;
   }
+
+  log_trace(init)("  Init: Compiler broker init finished");
+
 #if INCLUDE_JVMCI
   if (EnableJVMCI) {
     JVMCI::initialize_globals();
@@ -220,12 +253,21 @@ jint init_globals2() {
     TrainingData::initialize();
   }
 
+  log_trace(init)("  Init: Training data init finished");
+
   if (!universe_post_init()) {
     return JNI_ERR;
   }
+  log_trace(init)("  Init: Universe post-init init finished");
+
   compiler_stubs_init(false /* in_compiler_thread */); // compiler's intrinsics stubs
+  log_trace(init)("  Init: Compiler stubs init finished");
+
   final_stubs_init();    // final StubRoutines stubs
+  log_trace(init)("  Init: Final stubs init finished");
+
   MethodHandles::generate_adapters();
+  log_trace(init)("  Init: Adapter generation finished");
 
   // All the flags that get adjusted by VM_Version_init and os::init_2
   // have been set so dump the flags now.
@@ -234,6 +276,8 @@ jint init_globals2() {
   } else if (RecordTraining && xtty != nullptr) {
     JVMFlag::printFlags(xtty->log_only(), false, PrintFlagsRanges);
   }
+
+  log_trace(init)("  Init: Finished");
 
   return JNI_OK;
 }
